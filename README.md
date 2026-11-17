@@ -1,4 +1,4 @@
-#  Sistema de Ventas e Inventario - Papelería (MASM x86, Irvine32)
+#  Sistema de Ventas e Inventario - Papelería 
 
 Proyecto académico desarrollado en **MASM x86 (32 bits)** utilizando la librería **Irvine32**, enfocado en la gestión de inventario, control de existencias, procesamiento de ventas con reglas de negocio, persistencia en archivos binarios y optimización de código mediante **procedimientos, macros con `LOCAL`, y la directiva `USES`**.
 
