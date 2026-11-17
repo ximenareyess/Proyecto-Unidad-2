@@ -1,116 +1,88 @@
-# Proyecto Unidad 2 – Sistema Papelería 
+#  Sistema de Ventas e Inventario - Papelería (MASM x86, Irvine32)
 
-**Negocio:** papelería. 
-**Regla adicional:** descuento por cantidad (10 % del importe base si se venden ≥ 10 unidades; fracción de centavo descartada con división entera).
-Administra el inventario y las ventas de una papelería, con guardado y carga del catálogo en un archivo.
+Proyecto académico desarrollado en **MASM x86 (32 bits)** utilizando la librería **Irvine32**, enfocado en la gestión de inventario, control de existencias, procesamiento de ventas con reglas de negocio, persistencia en archivos binarios y optimización de código mediante **procedimientos, macros con `LOCAL`, y la directiva `USES`**.
 
-> Toda la captura y la salida de números se resuelve con **conversiones propias** (`ReadString` / `WriteString`). No se usan `ReadDec`, `ReadInt`, `ParseDecimal32`, `WriteDec` ni `WriteHex`.
+---
 
-##  Funciones
+##  Características y Mejoras (Unidad 3)
 
-| # | Opción | Descripción |
-|---|---|---|
-| 1 | Registrar producto | Alta con código `ABC-123`, nombre, precio y existencia. Rechaza duplicados y capacidad llena |
-| 2 | Mostrar inventario | Lista todos los productos |
-| 3 | Buscar por código | Localiza un producto |
-| 4 | Recibir mercancía | Suma unidades sin pasar de 100 |
-| 5 | Vender | Valida existencias, calcula el importe, aplica descuento y descuenta unidades |
-| 6 | Resumen | Unidades disponibles, valor del inventario e ingresos de la sesión |
-| 7 | Guardar | Escribe el catálogo en `inventario.dat` |
-| 8 | Cargar | Lee y valida `inventario.dat` antes de reemplazar el catálogo |
-| 9 | Salir | Avisa si hay cambios sin guardar |
+Esta versión implementa optimizaciones estructurales clave para maximizar la legibilidad y reducir la redundancia respecto a la Unidad 2:
+1. **Procedimientos Modularizados:** Tareas críticas como captura, validación de códigos y nombres, conversión de cadenas y manejo de archivos están aisladas en procedimientos independientes.
+2. **Macros Parametrizadas con `LOCAL`:** Se implementaron macros eficientes (`Say`, `Fail`, `Ask`, `ShowMXN`, `ShowU32`, `CopyField`, `RecAddr`, `MenuItem`) para simplificar secuencias repetitivas, utilizando etiquetas locales (`LOCAL`) para evitar colisiones en las expansiones del preprocesador.
+3. **Optimización con `USES`:** Adopción de la directiva `USES` en las cabeceras de los procedimientos para gestionar de forma limpia la preservación de registros en la pila, protegiendo adecuadamente los registros de retorno (`EAX`, `ESI`).
+4. **Verificación de Pila:** El programa monitorea constantemente el puntero de pila (`ESP`) al inicio de cada ciclo del menú principal para garantizar un balance perfecto y prevenir desbordamientos.
 
-El catálogo se carga automáticamente al iniciar si el archivo existe.
+---
 
-##  Regla adicional del negocio: descuento por cantidad
+##  Reglas del Negocio y Límites
 
-Si se venden **10 o más unidades** de un producto, se descuenta el **10 %** del importe base. La fracción de centavo se descarta (división entera).
+* **Capacidad:** Hasta **10 productos** en el catálogo activo.
+* **Código:** Formato exacto `ABC-123` (3 letras mayúsculas, un guion y 3 dígitos), único en el inventario.
+* **Nombre:** De 1 a 25 caracteres ASCII imprimibles.
+* **Precio:** De `$0.01` a `$9999.99` MXN. Se procesa internamente como **centavos enteros (`DWORD`)**.
+* **Existencia:** De 0 a 100 unidades por producto.
+* **Regla de Descuento por Cantidad:** Si se venden **10 o más unidades** de un mismo producto, se aplica automáticamente un **10% de descuento** sobre el importe base. Las fracciones de centavo se descartan mediante división entera (`DIV`).
 
-| Caso | Cálculo | Resultado |
-|---|---|---|
-| 9 mochilas a $185.50 | 9 × 185.50 | $1669.50 (sin descuento) |
-| 10 cuadernos a $45.50 | 455.00 − 45.50 | $409.50 (con descuento) |
+---
 
-##  Datos y límites
+##  Estructura de Datos y Persistencia (`inventario.dat`)
 
-- Hasta **10 productos**.
-- Código: 3 letras mayúsculas, guion y 3 dígitos (`ABC-123`), único.
-- Nombre: 1 a 25 caracteres imprimibles (sin `;`).
-- Precio: de $0.01 a $9999.99 MXN. Acepta pesos enteros o punto con 1 o 2 decimales; rechaza símbolos y separadores de miles. Se guarda internamente en **centavos enteros**.
-- Existencia: 0 a 100. Entradas y ventas: enteros mayores que cero.
-- Todos los importes se muestran con dos decimales y la etiqueta `MXN`.
-- Se comprueban desbordamientos (`MUL`/`ADD` con bandera de acarreo) y una operación rechazada no modifica los datos anteriores.
-
-##  Organización en memoria
-
-Cada producto ocupa un registro de **44 bytes**; `ESI` recorre la tabla sumando 44 por producto.
+El sistema almacena el catálogo en un archivo binario estructurado con una firma inicial y bloques de registros fijos de **44 bytes** por producto:
 
 | Offset | Tamaño | Campo |
-|---|---|---|
-| 0 | 8 | Código + `00h` |
-| 8 | 26 | Nombre + `00h` (relleno con ceros) |
-| 34 | 2 | Relleno de alineación |
-| 36 | 4 | Precio en centavos (DWORD) |
-| 40 | 4 | Existencia (DWORD) |
+| :--- | :--- | :--- |
+| `0` | 8 bytes | Código + terminador `00h` (`"ABC-123",0`) |
+| `8` | 26 bytes | Nombre + relleno con ceros |
+| `34` | 2 bytes | Relleno de alineación |
+| `36` | 4 bytes (`DWORD`) | Precio en centavos |
+| `40` | 4 bytes (`DWORD`) | Existencia actual |
 
-##  Formato de `inventario.dat`
+Al iniciar el programa, se intenta cargar automáticamente `inventario.dat` aplicando rigurosas validaciones de integridad (firma `"INV1"`, conteo de productos, validación de registros individuales y detección de códigos duplicados).
 
-Texto plano, editable en el Bloc de notas. Primera línea con la firma `INV1`; luego una línea por producto:
+---
 
-```
-INV1
-CUA-001;Cuaderno profesional;45.50;20
-MOC-015;Mochila escolar;185.50;15
-COR-789;Corrector liquido;12.05;8
+##  Requisitos de Compilación y Ejecución
 
-Formato de línea: `CODIGO;Nombre;precio MXN;existencia`.
-```
+1. **Entorno:** Sistema operativo Windows con **Visual Studio 2019 o 2022**.
+2. **Configuración de Ensamblador:** Habilitar **MASM** en el proyecto (*Build Customizations → masm*).
+3. **Librería:** Configurar la librería **Irvine32** en las propiedades del proyecto del curso.
+4. **Arquitectura:** Plataforma de compilación configurada estrictamente a **x86 (32 bits)**.
 
+---
 
-**Validaciones al cargar** (se interpreta a una tabla temporal y solo si todo es válido reemplaza el catálogo):
-archivo existente, sin error de lectura, tamaño menor a la capacidad del buffer, firma `INV1`, máximo 10 productos, código/nombre/precio/existencia válidos (con las mismas rutinas de la captura) y sin códigos duplicados. Si el archivo falta o está dañado, se muestra un aviso y se conserva el catálogo actual.
+##  Menú Principal de Opciones
 
-##  Requisitos
+1. **Registrar producto:** Alta validando formato, duplicados y capacidad máxima.
+2. **Mostrar inventario:** Lista detallada de todos los productos activos.
+3. **Buscar por código:** Localiza un producto y muestra sus datos formateados.
+4. **Recibir mercancía:** Incrementa el stock de un producto (límite máximo de 100).
+5. **Vender:** Valida stock, calcula importes, aplica el descuento por cantidad si corresponde y actualiza existencias e ingresos.
+6. **Resumen:** Muestra el total de unidades disponibles, el valor monetario del inventario y los ingresos acumulados de la sesión.
+7. **Guardar:** Escribe y actualiza el catálogo en `inventario.dat`.
+8. **Cargar:** Lee y valida el archivo externo para reemplazar el catálogo actual (con advertencia de cambios sin guardar).
+9. **Salir:** Cierra el sistema notificando si existen cambios pendientes de guardar.
 
-- Windows con **Visual Studio 2019/2022** 
-- **MASM** habilitado en el proyecto (*Build Customizations → masm*)
-- Librería **Irvine32** configurada (plantilla de proyecto del curso)
-- Plataforma de compilación: **x86** (32 bits)
+---
 
+##  Tabla de Pruebas (Unidad 3)
 
-##  Estructura del código
+| Caso de Prueba | Descripción / Acción | Entrada de Datos | Resultado Esperado | Resultado Obtenido | Estatus |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **1. Alta Válida** | Registrar un nuevo producto con datos correctos. | Código: `CUA-001`<br>Nombre: `Cuaderno`<br>Precio: `45.50`<br>Stock: `20` | Mensaje de éxito (`Producto registrado`). Catálogo actualizado y marcado como modificado (`dirty = 1`). | Mensaje de éxito, registro guardado correctamente en memoria. | **Aprobado** |
+| **2. Alta Duplicada** | Intentar registrar un producto con un código ya existente. | Código: `CUA-001`<br>*(demás datos válidos)* | Rechazo del alta con mensaje de código duplicado (`Codigo duplicado. Operacion rechazada.`). | Se rechazó la operación sin sobrescribir el registro previo. | **Aprobado** |
+| **3. Búsqueda Existente** | Localizar un producto mediante su código en el catálogo. | Opción `3`<br>Código: `CUA-001` | Muestra en pantalla el código, nombre, precio formateado y existencia actual del producto. | Despliegue correcto de los datos del producto solicitado. | **Aprobado** |
+| **4. Entrada de Mercancía** | Sumar existencias a un producto sin superar el límite. | Opción `4`<br>Código: `CUA-001`<br>Cantidad: `15` | Actualiza la existencia sumando las unidades y muestra el stock actual. Marcado con `dirty = 1`. | Stock actualizado correctamente a 35 unidades. | **Aprobado** |
+| **5. Venta con Descuento** | Vender 10 o más unidades aplicando la regla de negocio. | Opción `5`<br>Código: `CUA-001`<br>Cantidad: `10` (@ $45.50) | Importe base: `$455.00`<br>Descuento 10%: `-$45.50`<br>Importe final: `$409.50`<br>Venta aceptada. | Descuento aplicado correctamente descartando fracciones de centavo mediante división entera. | **Aprobado** |
+| **6. Venta Rechazada (Stock Insuficiente)** | Intentar vender más unidades de las disponibles. | Opción `5`<br>Código: `CUA-001`<br>Cantidad: `50` | Rechazo de la venta con el mensaje de existencias insuficientes. Stock y saldo intactos. | Operación rechazada sin alterar las existencias en inventario. | **Aprobado** |
+| **7. Resumen de Sesión** | Consultar el estado global del negocio. | Opción `6` | Despliegue de unidades totales disponibles, valor total monetario del inventario e ingresos acumulados. | Cálculo correcto y mostrado con el formato monetario MXN. | **Aprobado** |
+| **8. Carga y Persistencia** | Guardar en disco y recargar el archivo binario. | Opción `7` (Guardar)<br>Opción `8` (Cargar / Reinicio) | Lectura exitosa de `inventario.dat`, validación de firma `"INV1"`, integridad de registros y carga sin errores. | Catálogo recuperado fielmente desde el archivo binario externo. | **Aprobado** |
 
-| Procedimiento | Función |
-|---|---|
-| `ReadLine`, `GetInput` | Captura con `ReadString`, rechaza vacío y exceso de longitud |
-| `ParseUInt`, `ParsePrice` | Cadena → entero / centavos con validación |
-| `PrintU32`, `PrintMXN` | Entero → cadena decimal (cociente y residuo) y formato `$ 0.00 MXN` |
-| `ValidateCode`, `ValidateName`, `CodesEqual`, `FindProduct` | Validación y búsqueda |
-| `DoRegister`, `DoReceive`, `DoSell`, `DoSummary`, `DoShowAll`, `DoSearch` | Opciones del menú |
-| `SaveCatalog`, `LoadCatalog`, `ReadField` | Archivo de inventario |
-| `main` | Menú repetitivo; compara `ESP` en cada vuelta para verificar que la pila quede equilibrada |
+---
 
-Cada procedimiento documenta su entrada, salida y registros modificados, y conserva los registros que no son de salida.
+##  Fuentes Consultadas
 
-## Pruebas sugeridas
-
-- Alta válida y duplicada; códigos y precios inválidos (`12.345`, `$12`, `1,200`, `.5`, `5.`).
-- Búsqueda existente e inexistente.
-- Entrada de mercancía válida y que excede 100.
-- Venta aceptada, con y sin descuento, y venta sin existencias suficientes.
-- Resumen, guardar, cerrar y volver a ejecutar para recuperar el catálogo.
-- Archivo ausente, firma alterada, precio inválido o código repetido dentro del archivo.
-
-##  Notas
-
-- Proyecto académico. Revisa las fuentes y el informe de entrega por separado.
-- Los mensajes de consola están escritos sin acentos para evitar problemas de codificación en la consola de Windows.
-
-## Fuentes consultadas
-
-- Microsoft Learn. *Referencia de Microsoft Macro Assembler*. https://learn.microsoft.com/es-es/cpp/assembler/masm/microsoft-macro-assembler-reference?view=msvc-170
-- Ricardev. *Ensamblador* (pila, push/pop, ESP). https://ricardev.gitbook.io/red-team/pwn-linux/teoria/ensamblador
-- E0N Productions. *Taller ASM* (pila y CALL). https://ns2.elhacker.net/descargas/manuales/Lenguajes%20de%20Programacion/Ensamblador/Taller%20ASM%20-%20E0N%20Productions.pdf
-- Referencia de la instrucción DIV (basada en el manual de Intel). https://www.felixcloutier.com/x86/div.html
-- Jorgensen, E. *x86-64 Assembly Language Programming with Ubuntu*, cap. 10 (conversión de entero a cadena). https://eng.libretexts.org/Bookshelves/Computer_Science/Programming_Languages/x86-64_Assembly_Language_Programming_with_Ubuntu_(Jorgensen)/10%3A_Program_Development/10.03%3A_Implement_the_Program
-
+* Microsoft Learn. *Referencia de Microsoft Macro Assembler*. https://learn.microsoft.com/es-es/cpp/assembler/masm/microsoft-macro-assembler-reference?view=msvc-170
+* Ricardev. *Ensamblador* (pila, push/pop, ESP). https://ricardev.gitbook.io/red-team/pwn-linux/teoria/ensamblador
+* E0N Productions. *Taller ASM* (pila y CALL). https://ns2.elhacker.net/descargas/manuales/Lenguajes%20de%20Programacion/Ensamblador/Taller%20ASM%20-%20E0N%20Productions.pdf
+* Referencia de la instrucción DIV (basada en el manual de Intel). https://www.felixcloutier.com/x86/div.html
+* Jorgensen, E. *x86-64 Assembly Language Programming with Ubuntu*, cap. 10 (conversión de entero a cadena). https://eng.libretexts.org/Bookshelves/Computer_Science/Programming_Languages/x86-64_Assembly_Language_Programming_with_Ubuntu_(Jorgensen)/10%3A_Program_Development/10.03%3A_Implement_the_Program
